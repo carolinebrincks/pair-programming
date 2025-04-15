@@ -1,70 +1,97 @@
-from flask import Flask, request, jsonify
+import flask
+from flask import request, render_template, redirect, url_for
 from flask_cors import CORS
-import joblib
+import requests
 
-app = Flask(__name__)
+
+app = flask.Flask(__name__)
+app.config["SECRET_KEY"] = "seasdad(*2sffcra01^23sdet"
+
 CORS(app)
 
-# Load model once when the app starts
-model = joblib.load("salary_predict_model.ml")
+# Get this URL from the Azure Overview page of your API web app
+api_url = "http://127.0.0.1:5000"  # base url for API endpoints
 
 
+# main index page route
 @app.route("/")
-def home():
-    """Landing page for the Salary Prediction API"""
-    return (
-        "<h1>Salary Prediction API</h1>"
-        "<p>BAIS:3300 - Digital Product Development</p>"
-        "<p>Mike Colbert</p>"
-    )
+def index():
+    return render_template("index.html")
 
 
-@app.route("/predict", methods=["POST"])
+@app.route("/predict", methods=["GET", "POST"])
 def predict():
-    """
-    Predict salary based on input JSON payload
-    Expected keys: age, gender, country, highest_deg, coding_exp, title, company_size
-    """
-    print("inside predict")
-    try:
-        data = request.get_json()
+    print("in predict route")
+    if request.method == "GET":
+        return render_template("index.html")
 
-        print(f"data from the user: {data}")
+    if request.method == "POST":
+        print("in post method")
+        #### capture data from the form
+        form = request.form  # declare a form variable to capture the form data
+        print("extracted form data")
+        print(form)
+        # extract user data from the form and save it in a python variable
+        age = form["age"]
+        print(age)
+        gender = form["gender"]
+        country = form["country"]
+        highest_deg = form["highest_deg"]
+        coding_exp = form["coding_exp"]
+        title = form["title"]
+        company_size = form["company_size"]
 
-        required_fields = [
-            "age",
-            "gender",
-            "country",
-            "highest_deg",
-            "coding_exp",
-            "title",
-            "company_size",
-        ]
-        if not all(field in data for field in required_fields):
-            return jsonify({"error": "Missing one or more required fields"}), 400
+        print(age, gender, country, highest_deg, coding_exp, title, company_size)
 
-        # Ensure correct order and type
-        features = [
-            int(data["age"]),
-            int(data["gender"]),
-            int(data["country"]),
-            int(data["highest_deg"]),
-            int(data["coding_exp"]),
-            int(data["title"]),
-            int(data["company_size"]),
-        ]
+        # Create dictionary of form data
+        salary_predict_variables = {
+            "age": age,
+            "gender": gender,
+            "country": country,
+            "highest_deg": highest_deg,
+            "coding_exp": coding_exp,
+            "title": title,
+            "company_size": company_size,
+        }
 
-        print(f"features before using the model: {data}")
+        # Send data to API as JSON
+        url = api_url + f"/predict"
+        print(url)
+        headers = {"Content-Type": "application/json"}
+        print(headers)
 
-        prediction = model.predict([features])[0]
+        # get a response from the api
+        try:
+            # Send data to API as JSON and get a response
+            response = requests.post(
+                url, json=salary_predict_variables, headers=headers
+            )
 
-        print(f"prediction: {prediction}")
+            # Check if the response was successful (status code 200)
+            if response.status_code == 200:
+                # Decode the JSON response
+                prediction = response.json()
 
-        return jsonify({"predicted_salary": prediction})
+                print(prediction)  # Print the decoded JSON for debugging
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+                # Pass the decoded JSON response to the HTML page
+                return render_template("index.html", prediction=prediction)
+
+            else:
+                # Handle responses with error status codes
+                print(
+                    f"Error: Received response with status code {response.status_code}"
+                )
+                error_message = f"Failed to get prediction, server responded with status code: {response.status_code}"
+                return render_template("index.html", error=error_message)
+
+        except requests.exceptions.RequestException as e:
+            # Handle network-related errors (e.g., DNS failure, refused connection, etc)
+            print(f"Request failed: {e}")
+            return render_template(
+                "index.html", error="Failed to make request to prediction API."
+            )
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5002, debug=True)
+    app.run(host="0.0.0.0", port=5003, debug=True)
